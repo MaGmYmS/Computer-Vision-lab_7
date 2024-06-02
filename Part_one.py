@@ -32,6 +32,7 @@ def load_mnist():
 
     return data
 
+
 # endregion
 
 # region Визуализация
@@ -69,11 +70,11 @@ def display_generated_images(generator_inner, latent_dim_inner, examples=10):
 # Построение генератора
 def build_generator(latent_dim_inner):
     model = Sequential()
-    model.add(Dense(2 * 2 * 256, use_bias=False, input_shape=(latent_dim_inner,)))
+    model.add(Dense(7 * 7 * 256, use_bias=False, input_shape=(latent_dim_inner,)))
     model.add(BatchNormalization())
     model.add(LeakyReLU())
-    model.add(Reshape((2, 2, 256)))  # Начальная форма 4x4x256
-    model.add(Conv2DTranspose(128, (5, 5), strides=(2, 2), padding='same', use_bias=False))
+    model.add(Reshape((7, 7, 256)))  # Начальная форма 7x7x256
+    model.add(Conv2DTranspose(128, (5, 5), strides=(1, 1), padding='same', use_bias=False))
     model.add(BatchNormalization())
     model.add(LeakyReLU())
     model.add(Conv2DTranspose(64, (5, 5), strides=(2, 2), padding='same', use_bias=False))
@@ -82,7 +83,7 @@ def build_generator(latent_dim_inner):
     model.add(Conv2DTranspose(32, (5, 5), strides=(2, 2), padding='same', use_bias=False))
     model.add(BatchNormalization())
     model.add(LeakyReLU())
-    model.add(Conv2DTranspose(3, (5, 5), strides=(2, 2), padding='same', use_bias=False, activation='tanh'))
+    model.add(Conv2DTranspose(1, (5, 5), strides=(1, 1), padding='same', use_bias=False, activation='tanh'))
     return model
 
 
@@ -95,12 +96,9 @@ def build_discriminator(image_shape):
     model.add(LeakyReLU())
     model.add(Conv2D(256, (5, 5), strides=(2, 2), padding='same'))
     model.add(LeakyReLU())
-    model.add(Conv2D(512, (5, 5), strides=(2, 2), padding='same'))
-    model.add(LeakyReLU())
     model.add(Flatten())
     model.add(Dense(1, activation='sigmoid'))
     return model
-
 
 
 # Построение и компиляция GAN
@@ -160,6 +158,14 @@ def train_gan(gan_inner, generator_inner, discriminator_inner, data_inner, epoch
         if epoch % save_interval_inner == 0:
             save_images(generator_inner, epoch, latent_dim_inner)
             print(f"{epoch} [D loss: {d_loss[0]} | D accuracy: {100 * d_loss[1]}] [G loss: {g_loss}]")
+            # Сохранение генератора
+            generator_inner.save(f'generator-epoch-{epoch}.h5')
+
+            # Сохранение дискриминатора
+            discriminator_inner.save(f'discriminator-epoch-{epoch}.h5')
+
+            # Сохранение всей модели GAN
+            gan_inner.save(f'gan-epoch-{epoch}.h5')
 
     return gan_inner
 
@@ -168,18 +174,18 @@ def train_gan(gan_inner, generator_inner, discriminator_inner, data_inner, epoch
 
 
 # Загрузка и нормализация данных
-print("Начинаю загрузку датасета CIFAR-10")
-data = load_cifar10()
-print("Датасет CIFAR-10 загружен")
+# print("Начинаю загрузку датасета CIFAR-10")
+# data = load_cifar10()
+# print("Датасет CIFAR-10 загружен")
 
-# print("Начинаю загрузку датасета MNIST")
-# data = load_mnist()
-# print("Датасет MNIST загружен")
+print("Начинаю загрузку датасета MNIST")
+data = load_mnist()
+print("Датасет MNIST загружен")
 
 # Создание моделей
 # Основные параметры
 latent_dim = 100
-img_shape = (32, 32, 3)
+img_shape = (28, 28, 1)
 epochs = 1
 batch_size = 32
 save_interval = 1
@@ -195,11 +201,11 @@ result_training_gan = train_gan(gan, generator, discriminator, data, epochs, bat
 display_generated_images(generator, latent_dim)
 
 # Сохранение генератора
-generator.save('generator.h5')
+generator.save('generator_result.h5')
 
 # Сохранение дискриминатора
-discriminator.save('discriminator.h5')
+discriminator.save('discriminator_result.h5')
 
 # Сохранение всей модели GAN
-gan.save('gan.h5')
-result_training_gan.save('result_training_gan.h5')
+gan.save('gan_result.h5')
+result_training_gan.save('result_training_gan_result.h5')
