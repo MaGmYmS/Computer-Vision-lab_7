@@ -1,10 +1,12 @@
+import json
+
+import h5py
 import tensorflow as tf
-import concurrent.futures
 from keras import Sequential
 from keras.src.datasets import cifar10, mnist
 from tensorflow.keras.layers import Dense, Reshape, Flatten, BatchNormalization, LeakyReLU, Conv2D, Conv2DTranspose
 from tensorflow.keras.optimizers import Adam
-
+import keras
 import matplotlib.pyplot as plt
 import numpy as np
 from tqdm import tqdm
@@ -64,40 +66,94 @@ def display_generated_images(generator_inner, latent_dim_inner, examples=10):
     plt.show()
 
 
+def visualize_results(generator, latent_dim, n_samples=10):
+    """
+    Визуализирует результаты работы генератора.
+
+    :param generator: Модель генератора
+    :param latent_dim: Размерность латентного пространства
+    :param n_samples: Количество сгенерированных изображений для отображения
+    """
+    # Генерация случайного латентного вектора
+    random_latent_vectors = np.random.normal(0, 1, (n_samples, latent_dim))
+
+    # Генерация изображений
+    generated_images = generator.predict(random_latent_vectors)
+
+    # Нормализация изображений
+    generated_images = (generated_images + 1) / 2.0  # Преобразование от [-1, 1] к [0, 1]
+
+    # Определение размера сетки для отображения изображений
+    grid_size = int(np.sqrt(n_samples))
+
+    # Создание фигуры
+    fig, axes = plt.subplots(grid_size, grid_size, figsize=(10, 10))
+    axes = axes.flatten()
+
+    for img, ax in zip(generated_images, axes):
+        ax.imshow(img.squeeze(), cmap='gray')
+        ax.axis('off')
+
+    plt.tight_layout()
+    plt.show()
+
+
 # endregion
 
 # region Модели
 # Построение генератора
 def build_generator(latent_dim_inner):
     model = Sequential()
+
+    # Входной слой: плотный (Dense) слой
     model.add(Dense(7 * 7 * 256, use_bias=False, input_shape=(latent_dim_inner,)))
     model.add(BatchNormalization())
     model.add(LeakyReLU())
+
+    # Преобразование в 3D-форму (7, 7, 256)
     model.add(Reshape((7, 7, 256)))  # Начальная форма 7x7x256
+
+    # Первый слой транспонированной свертки (Conv2DTranspose)
     model.add(Conv2DTranspose(128, (5, 5), strides=(1, 1), padding='same', use_bias=False))
     model.add(BatchNormalization())
     model.add(LeakyReLU())
+
+    # Второй слой транспонированной свертки (увеличение размера до 14x14)
     model.add(Conv2DTranspose(64, (5, 5), strides=(2, 2), padding='same', use_bias=False))
     model.add(BatchNormalization())
     model.add(LeakyReLU())
+
+    # Третий слой транспонированной свертки (увеличение размера до 28x28)
     model.add(Conv2DTranspose(32, (5, 5), strides=(2, 2), padding='same', use_bias=False))
     model.add(BatchNormalization())
     model.add(LeakyReLU())
+
+    # Выходной слой (одноканальное изображение 28x28)
     model.add(Conv2DTranspose(1, (5, 5), strides=(1, 1), padding='same', use_bias=False, activation='tanh'))
+
     return model
 
 
 # Построение дискриминатора
 def build_discriminator(image_shape):
     model = Sequential()
+
+    # Первый сверточный слой
     model.add(Conv2D(64, (5, 5), strides=(2, 2), padding='same', input_shape=image_shape))
     model.add(LeakyReLU())
+
+    # Второй сверточный слой
     model.add(Conv2D(128, (5, 5), strides=(2, 2), padding='same'))
     model.add(LeakyReLU())
+
+    # Третий сверточный слой
     model.add(Conv2D(256, (5, 5), strides=(2, 2), padding='same'))
     model.add(LeakyReLU())
+
+    # Выравнивание (Flatten) и плотный (Dense) слой
     model.add(Flatten())
     model.add(Dense(1, activation='sigmoid'))
+
     return model
 
 
@@ -173,39 +229,66 @@ def train_gan(gan_inner, generator_inner, discriminator_inner, data_inner, epoch
 # endregion
 
 
-# Загрузка и нормализация данных
-# print("Начинаю загрузку датасета CIFAR-10")
-# data = load_cifar10()
-# print("Датасет CIFAR-10 загружен")
+def train_model():
+    print("Начинаю загрузку датасета MNIST")
+    data = load_mnist()
+    print("Датасет MNIST загружен")
 
-print("Начинаю загрузку датасета MNIST")
-data = load_mnist()
-print("Датасет MNIST загружен")
+    # Создание моделей
+    # Основные параметры
+    latent_dim = 100
+    img_shape = (28, 28, 1)
+    epochs = 1
+    batch_size = 16
+    save_interval = 1
+    print("Создаю модель")
+    generator = build_generator(latent_dim)
+    discriminator = build_discriminator(img_shape)
+    gan = build_gan(generator, discriminator, latent_dim)
 
-# Создание моделей
-# Основные параметры
-latent_dim = 100
-img_shape = (28, 28, 1)
-epochs = 1
-batch_size = 32
-save_interval = 1
-print("Создаю модель")
-generator = build_generator(latent_dim)
-discriminator = build_discriminator(img_shape)
-gan = build_gan(generator, discriminator, latent_dim)
+    # Обучение модели
+    print("Начинаю обучение модели")
+    result_training_gan = train_gan(gan, generator, discriminator, data, epochs, batch_size, latent_dim, save_interval)
 
-# Обучение модели
-print("Начинаю обучение модели")
-result_training_gan = train_gan(gan, generator, discriminator, data, epochs, batch_size, latent_dim, save_interval)
+    display_generated_images(generator, latent_dim)
 
-display_generated_images(generator, latent_dim)
+    # Сохранение генератора
+    generator.save('generator_result.h5')
 
-# Сохранение генератора
-generator.save('generator_result.h5')
+    # Сохранение дискриминатора
+    discriminator.save('discriminator_result.h5')
 
-# Сохранение дискриминатора
-discriminator.save('discriminator_result.h5')
+    # Сохранение всей модели GAN
+    gan.save('gan_result.h5')
+    result_training_gan.save('result_training_gan_result.h5')
 
-# Сохранение всей модели GAN
-gan.save('gan_result.h5')
-result_training_gan.save('result_training_gan_result.h5')
+
+def load_and_compile_model(filepath):
+    remove_groups_param_from_h5(filepath)
+    model = keras.models.load_model(filepath)
+    model.compile(optimizer='adam', loss='binary_crossentropy', metrics=['accuracy'])
+    return model
+
+
+def check_result(latent_dim_inner=100):
+    start_epoch = 15
+    generator = load_and_compile_model(
+        rf"D:\я у мамы программист\3 курс 2 семестр КЗ\lab_7\pythonProject\generator-epoch-{start_epoch}.h5")
+
+    visualize_results(generator, latent_dim_inner, 100)
+
+
+def remove_groups_param_from_h5(filepath_inner):
+    with h5py.File(filepath_inner, 'r+') as f:
+        model_config = f.attrs['model_config']
+        model_config = json.loads(model_config)
+
+        for layer in model_config['config']['layers']:
+            if 'groups' in layer['config']:
+                del layer['config']['groups']
+
+        f.attrs['model_config'] = json.dumps(model_config).encode('utf-8')
+
+
+if __name__ == "__main__":
+    check_result()
